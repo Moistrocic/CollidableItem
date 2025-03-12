@@ -1,0 +1,46 @@
+{
+	"schemaVersion": 1,
+	"id": "collidableitem",
+	"version": "1.0.0",
+	"name": "CollidableItem",
+	"description": "",
+	"authors": [
+		"Moistrocic"
+	],
+	"contact": {
+		"sources": "https://github.com/Moistrocic/CollidableItem/"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/collidableitem/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			{
+				"value": "com.collidableitem.CollidableItem",
+				"adapter": "kotlin"
+			}
+		],
+		"client": [
+			{
+				"value": "com.collidableitem.CollidableItemClient",
+				"adapter": "kotlin"
+			}
+		],
+		"fabric-datagen": [
+			{
+				"value": "com.collidableitem.CollidableItemDataGenerator",
+				"adapter": "kotlin"
+			}
+		]
+	},
+	"mixins": [
+		"collidableitem.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.16.10",
+		"minecraft": "~1.21",
+		"java": ">=21",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*"
+	}
+}
