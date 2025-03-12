@@ -38,6 +38,13 @@ processResources {
 	}
 }
 
+tasks.withType(JavaExec).configureEach {
+	jvmArgs(
+			"-XX:+AllowEnhancedClassRedefinition",
+			"-javaagent:C:\\Users\\fu\\.gradle\\caches\\modules-2\\files-2.1\\net.fabricmc\\sponge-mixin\\0.15.4+mixin.0.8.7\\6a12aacc794f1078458433116e9ed42c1cc98096\\sponge-mixin-0.15.4+mixin.0.8.7.jar"
+	)
+}
+
 tasks.withType(JavaCompile).configureEach {
 	it.options.release = 21
 }
