@@ -16,8 +16,4 @@ class CollidableItemEntity : ItemEntity {
     }
 
     override fun onPlayerCollision(player: PlayerEntity) {}
-
-    override fun isCollidable(): Boolean {
-        return true
-    }
 }

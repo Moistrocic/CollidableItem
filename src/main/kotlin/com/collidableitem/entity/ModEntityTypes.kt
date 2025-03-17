@@ -13,7 +13,7 @@ object ModEntityTypes {
         Identifier.of(CollidableItem.MOD_ID, "collidable_item"),
         EntityType.Builder.create(::CollidableItemEntity, SpawnGroup.MISC)
             .dimensions(0.25F, 0.25F)
-            .eyeHeight(0.2125F)
+            .eyeHeight(0.0F)
             .maxTrackingRange(6)
             .trackingTickInterval(20)
             .build()
