@@ -12,13 +12,15 @@ import net.minecraft.entity.ItemEntity
 import net.minecraft.item.Item
 import net.minecraft.util.math.random.Random
 import org.joml.Vector3f
+import java.util.*
+import kotlin.collections.ArrayList
 
 class CollidableItemEntityRenderer(
     ctx: EntityRendererFactory.Context
 ) : ItemEntityRenderer(ctx) {
     private var itemRenderer: ItemRenderer? = null
     private val random: Random = Random.create()
-    private var linesMap: MutableMap<Item, List<VertexesCapturer.Line>> = mutableMapOf()
+    private var facesMap: MutableMap<Item, List<VertexesCapturer.Face>> = mutableMapOf()
 
     init {
         itemRenderer = ctx.itemRenderer
@@ -40,31 +42,36 @@ class CollidableItemEntityRenderer(
         vertexConsumerProvider: VertexConsumerProvider,
         i: Int
     ) {
+
+    }
+
+    fun renderHitBox(
+        itemEntity: ItemEntity,
+        matrixStack: MatrixStack,
+        vertexConsumerProvider: VertexConsumerProvider,
+        i: Int
+    ) {
         val item = itemEntity.stack.item
-        if (!linesMap.containsKey(item)) {
+        if (!facesMap.containsKey(item)) {
             val vertexConsumerCapturer = VertexConsumerCapturer(vertexConsumerProvider)
 
             matrixStack.push()
             val camera = MinecraftClient.getInstance().gameRenderer.camera
             matrixStack.translate(camera.pos.x, camera.pos.y, camera.pos.z)
             matrixStack.translate(-itemEntity.x, -itemEntity.y, -itemEntity.z)
+            matrixStack.translate(0.0, 0.25, 0.0)
             val itemStack = itemEntity.stack
             val bakedModel = itemRenderer!!.getModel(itemStack, itemEntity.world, null, 0)
             itemRenderer!!.renderItem(itemStack, ModelTransformationMode.FIXED, false, matrixStack,
                 vertexConsumerCapturer, i, OverlayTexture.DEFAULT_UV, bakedModel)
             matrixStack.pop()
 
-            vertexConsumerCapturer.getVertexesCapturer()?.getLines()?.let { linesMap[item] = it }
+            vertexConsumerCapturer.getVertexesCapturer()?.getFaces()?.let { facesMap[item] = it }
         }
-        val lines = linesMap[item] ?: return
-        lines.forEach { (startPoint, endPoint) ->
-            val startVertex = startPoint.first
-            val endVertex = endPoint.first
-            val vector1 = startPoint.second
-            DrawUtil.drawSlash(matrixStack, vertexConsumerProvider.getBuffer(RenderLayer.getLines()),
-                startVertex.x, startVertex.y, startVertex.z,
-                endVertex.x, endVertex.y, endVertex.z,
-                1.0f, 1.0f, 1.0f, 1.0f, vector1.x, vector1.y, vector1.z)
+        val faces = facesMap[item] ?: return
+        faces.forEach {
+            DrawUtil.drawFaceBorder(matrixStack, vertexConsumerProvider.getBuffer(RenderLayer.getLines()),
+                it, 1.0f, 1.0f, 1.0f, 1.0f)
         }
     }
 
@@ -87,18 +94,13 @@ class CollidableItemEntityRenderer(
         private val bufferBuilder: VertexConsumer
     ) : VertexConsumer by bufferBuilder {
 
-        private val lines: MutableList<Line> = ArrayList()
         private var vertexCache: Vector3f = Vector3f()
-        private var vertexVectorCache: Pair<Vector3f, Vector3f>? = null
-        private var startVertexVector: Pair<Vector3f, Vector3f>? = null
 
-        fun getLines(): List<Line> {
-            if (vertexVectorCache != null &&
-                startVertexVector != null) {
-                val endClosedLine = Line(vertexVectorCache!!, startVertexVector!!)
-                lines.add(endClosedLine)
-            }
-            return lines
+        private val faces: MutableList<Face> = ArrayList()
+        private val pointStack: Stack<Vector3f> = Stack()
+
+        fun getFaces(): List<Face> {
+            return faces
         }
 
         override fun vertex(x: Float, y: Float, z: Float): VertexConsumer {
@@ -108,27 +110,23 @@ class CollidableItemEntityRenderer(
 
         override fun normal(x: Float, y: Float, z: Float): VertexConsumer {
             val vector = Vector3f(x, y, z)
-            val vertexVector = Pair(vertexCache, vector)
-            if (startVertexVector?.second != vertexVector.second) {
-                startVertexVector?.let {
-                    val closedLine = Line(vertexVectorCache!!, it)
-                    lines.add(closedLine)
-                }
-                startVertexVector = vertexVector
+            pointStack.push(vertexCache)
+            if (pointStack.size >= 4) {
+                val pointList = listOf(
+                    pointStack.pop(),
+                    pointStack.pop(),
+                    pointStack.pop(),
+                    pointStack.pop()
+                )
+                val face = Face(pointList, vector)
+                faces.add(face)
             }
-            vertexVectorCache?.let {
-                if (it.second == vertexVector.second) {
-                    val line = Line(it, vertexVector)
-                    lines.add(line)
-                }
-            }
-            vertexVectorCache = vertexVector
             return bufferBuilder.normal(x, y, z)
         }
 
-        data class Line(
-            val startPoint: Pair<Vector3f, Vector3f>,
-            val endPoint: Pair<Vector3f, Vector3f>
+        data class Face(
+            val pointList: List<Vector3f>,
+            val direction: Vector3f
         )
     }
 }
