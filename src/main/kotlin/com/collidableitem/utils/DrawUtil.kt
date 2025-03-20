@@ -1,6 +1,5 @@
 package com.collidableitem.utils
 
-import com.collidableitem.entity.CollidableItemEntityRenderer
 import net.minecraft.client.render.VertexConsumer
 import net.minecraft.client.util.math.MatrixStack
 
@@ -9,7 +8,7 @@ object DrawUtil {
     fun drawFaceBorder(
         matrices: MatrixStack,
         vertexConsumer: VertexConsumer,
-        face: CollidableItemEntityRenderer.VertexesCapturer.Face,
+        face: IrregularShape.Face,
         red: Float,
         green: Float,
         blue: Float,

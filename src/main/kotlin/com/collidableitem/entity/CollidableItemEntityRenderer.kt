@@ -1,6 +1,7 @@
 package com.collidableitem.entity
 
 import com.collidableitem.utils.DrawUtil
+import com.collidableitem.utils.IrregularShape
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.render.*
 import net.minecraft.client.render.entity.EntityRendererFactory
@@ -9,29 +10,16 @@ import net.minecraft.client.render.item.ItemRenderer
 import net.minecraft.client.render.model.json.ModelTransformationMode
 import net.minecraft.client.util.math.MatrixStack
 import net.minecraft.entity.ItemEntity
-import net.minecraft.item.Item
-import net.minecraft.util.math.random.Random
 import org.joml.Vector3f
 import java.util.*
-import kotlin.collections.ArrayList
 
 class CollidableItemEntityRenderer(
     ctx: EntityRendererFactory.Context
 ) : ItemEntityRenderer(ctx) {
     private var itemRenderer: ItemRenderer? = null
-    private val random: Random = Random.create()
-    private var facesMap: MutableMap<Item, List<VertexesCapturer.Face>> = mutableMapOf()
 
     init {
         itemRenderer = ctx.itemRenderer
-    }
-
-    fun getItemRenderer(): ItemRenderer {
-        return itemRenderer!!
-    }
-
-    fun getRandom(): Random {
-        return random
     }
 
     override fun render(
@@ -52,7 +40,7 @@ class CollidableItemEntityRenderer(
         i: Int
     ) {
         val item = itemEntity.stack.item
-        if (!facesMap.containsKey(item)) {
+        if (CollidableItemEntity.getIrShape(item) == IrregularShape.EMPTY) {
             val vertexConsumerCapturer = VertexConsumerCapturer(vertexConsumerProvider)
 
             matrixStack.push()
@@ -66,10 +54,11 @@ class CollidableItemEntityRenderer(
                 vertexConsumerCapturer, i, OverlayTexture.DEFAULT_UV, bakedModel)
             matrixStack.pop()
 
-            vertexConsumerCapturer.getVertexesCapturer()?.getFaces()?.let { facesMap[item] = it }
+            vertexConsumerCapturer.getVertexesCapturer()?.getIrShape()?.let {
+                CollidableItemEntity.setIrShape(item, it)
+            }
         }
-        val faces = facesMap[item] ?: return
-        faces.forEach {
+        CollidableItemEntity.getIrShape(item).getFaces().forEach {
             DrawUtil.drawFaceBorder(matrixStack, vertexConsumerProvider.getBuffer(RenderLayer.getLines()),
                 it, 1.0f, 1.0f, 1.0f, 1.0f)
         }
@@ -96,11 +85,11 @@ class CollidableItemEntityRenderer(
 
         private var vertexCache: Vector3f = Vector3f()
 
-        private val faces: MutableList<Face> = ArrayList()
+        private val irShape: IrregularShape = IrregularShape()
         private val pointStack: Stack<Vector3f> = Stack()
 
-        fun getFaces(): List<Face> {
-            return faces
+        fun getIrShape(): IrregularShape {
+            return irShape
         }
 
         override fun vertex(x: Float, y: Float, z: Float): VertexConsumer {
@@ -118,15 +107,9 @@ class CollidableItemEntityRenderer(
                     pointStack.pop(),
                     pointStack.pop()
                 )
-                val face = Face(pointList, vector)
-                faces.add(face)
+                irShape.addFace(pointList, vector)
             }
             return bufferBuilder.normal(x, y, z)
         }
-
-        data class Face(
-            val pointList: List<Vector3f>,
-            val direction: Vector3f
-        )
     }
 }
