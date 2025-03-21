@@ -1,6 +1,7 @@
 package com.collidableitem.entity
 
-import com.collidableitem.utils.IrregularShape
+import com.bulletphysics.collision.dispatch.CollisionObject
+import com.bulletphysics.collision.shapes.ByteBufferVertexData
 import net.minecraft.entity.EntityType
 import net.minecraft.entity.ItemEntity
 import net.minecraft.entity.player.PlayerEntity
@@ -10,20 +11,33 @@ import net.minecraft.util.crash.CrashReport
 import net.minecraft.util.crash.CrashReportSection
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
+import java.nio.ByteBuffer
 
 class CollidableItemEntity : ItemEntity {
     companion object {
-        private val irShapeMap: MutableMap<Item, IrregularShape> = mutableMapOf()
+        private val baseCollisionObjectMap = mutableMapOf<Item, CollisionObject>()
+        val normalDataMap: MutableMap<ByteBufferVertexData, ByteBuffer> = mutableMapOf()
+        val normalCountMap: MutableMap<ByteBufferVertexData, Int> = mutableMapOf()
+        val normalStrideMap: MutableMap<ByteBufferVertexData, Int> = mutableMapOf()
 
-        @JvmStatic
-        fun setIrShape(item: Item, irShape: IrregularShape) {
-            irShapeMap[item] = irShape
+        fun setBaseCollisionObject(item: Item, collisionObject: CollisionObject) {
+            baseCollisionObjectMap[item] = collisionObject
         }
 
-        @JvmStatic
-        fun getIrShape(item: Item): IrregularShape {
-            return irShapeMap[item] ?: IrregularShape.EMPTY
+        fun getBaseCollisionObject(item: Item): CollisionObject? {
+            return baseCollisionObjectMap[item]
         }
+    }
+
+    private val collisionObject: CollisionObject = CollisionObject()
+
+    fun getCollisionObject(): CollisionObject {
+        if (collisionObject.collisionShape == null) {
+            getBaseCollisionObject(stack.item)?.collisionShape?.let {
+                collisionObject.collisionShape = it
+            }
+        }
+        return collisionObject
     }
 
     constructor(entityType: EntityType<out ItemEntity>, world: World) : super(entityType, world)

@@ -1,28 +1,45 @@
 package com.collidableitem.utils
 
+import com.bulletphysics.collision.dispatch.CollisionObject
+import com.bulletphysics.collision.shapes.BvhTriangleMeshShape
+import com.bulletphysics.collision.shapes.ByteBufferVertexData
+import com.bulletphysics.collision.shapes.TriangleIndexVertexArray
+import com.collidableitem.entity.getNormalData
 import net.minecraft.client.render.VertexConsumer
 import net.minecraft.client.util.math.MatrixStack
+import javax.vecmath.Vector3f
 
 object DrawUtil {
 
     fun drawFaceBorder(
         matrices: MatrixStack,
         vertexConsumer: VertexConsumer,
-        face: IrregularShape.Face,
+        collisionObject: CollisionObject,
         red: Float,
         green: Float,
         blue: Float,
         alpha: Float
     ) {
-        val pointList = face.pointList.toMutableList()
-        val vector = face.direction
-        pointList.add(face.pointList.first())
-        pointList.zipWithNext().forEach { (point1, point2) ->
-            drawSlash(matrices, vertexConsumer,
-                point1.x, point1.y, point1.z, point2.x, point2.y, point2.z,
-                red, green, blue, alpha,
-                vector.x, vector.y, vector.z
-            )
+        val collisionShape = collisionObject.collisionShape as BvhTriangleMeshShape
+        val meshData = (collisionShape.meshInterface as TriangleIndexVertexArray)
+            .getLockedVertexIndexBase(0) as ByteBufferVertexData
+        val triangleCount = meshData.indexCount / 3
+        for (i in 0 until triangleCount) {
+            val triangleIndex = meshData.getTriangleIndex(i)
+            triangleIndex.add(triangleIndex.first())
+            val triangleVertices = triangleIndex.stream().map{
+                val vertex = Vector3f()
+                meshData.getVertex(it, vertex)
+                vertex
+            }.toList()
+            val vector = meshData.getNormalData(i)
+            triangleVertices.zipWithNext{ vertex1, vertex2 ->
+                drawSlash(matrices, vertexConsumer,
+                    vertex1.x, vertex1.y, vertex1.z, vertex2.x, vertex2.y, vertex2.z,
+                    red, green, blue, alpha,
+                    vector.x, vector.y, vector.z
+                )
+            }
         }
     }
 
@@ -47,4 +64,11 @@ object DrawUtil {
         vertexConsumer.vertex(entry, x1, y1, z1).color(red, green, blue, alpha).normal(entry, unitX, unitY, unitZ)
         vertexConsumer.vertex(entry, x2, y2, z2).color(red, green, blue, alpha).normal(entry, unitX, unitY, unitZ)
     }
+}
+
+fun ByteBufferVertexData.getTriangleIndex(idx: Int): MutableList<Int> {
+    val index1 = this.getIndex(idx * 3)
+    val index2 = this.getIndex(idx * 3 + 1)
+    val index3 = this.getIndex(idx * 3 + 2)
+    return mutableListOf(index1, index2, index3)
 }

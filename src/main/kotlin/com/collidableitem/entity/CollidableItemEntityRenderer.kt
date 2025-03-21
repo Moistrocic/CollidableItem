@@ -1,7 +1,10 @@
 package com.collidableitem.entity
 
+import com.bulletphysics.collision.dispatch.CollisionObject
+import com.bulletphysics.collision.shapes.BvhTriangleMeshShape
+import com.bulletphysics.collision.shapes.ByteBufferVertexData
+import com.bulletphysics.collision.shapes.TriangleIndexVertexArray
 import com.collidableitem.utils.DrawUtil
-import com.collidableitem.utils.IrregularShape
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.render.*
 import net.minecraft.client.render.entity.EntityRendererFactory
@@ -10,8 +13,10 @@ import net.minecraft.client.render.item.ItemRenderer
 import net.minecraft.client.render.model.json.ModelTransformationMode
 import net.minecraft.client.util.math.MatrixStack
 import net.minecraft.entity.ItemEntity
-import org.joml.Vector3f
-import java.util.*
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import javax.vecmath.Vector3f
+import kotlin.collections.ArrayList
 
 class CollidableItemEntityRenderer(
     ctx: EntityRendererFactory.Context
@@ -40,7 +45,7 @@ class CollidableItemEntityRenderer(
         i: Int
     ) {
         val item = itemEntity.stack.item
-        if (CollidableItemEntity.getIrShape(item) == IrregularShape.EMPTY) {
+        if (CollidableItemEntity.getBaseCollisionObject(item) == null) {
             val vertexConsumerCapturer = VertexConsumerCapturer(vertexConsumerProvider)
 
             matrixStack.push()
@@ -54,14 +59,57 @@ class CollidableItemEntityRenderer(
                 vertexConsumerCapturer, i, OverlayTexture.DEFAULT_UV, bakedModel)
             matrixStack.pop()
 
-            vertexConsumerCapturer.getVertexesCapturer()?.getIrShape()?.let {
-                CollidableItemEntity.setIrShape(item, it)
+            vertexConsumerCapturer.getVertexesCapturer()?.let {
+                val triangleVertexIndexes = it.getTriangleVertexIndexArray()
+                val triangleIndexesBuffer = createByteBuffer(
+                    triangleVertexIndexes.toList(),
+                    triangleVertexIndexes.size * Int.SIZE_BYTES,
+                    ByteBuffer::putInt
+                )
+                val vertexCoordinates = it.getVerticesCoordinateArray()
+                val vertexCoordinatesBuffer = createByteBuffer(
+                    vertexCoordinates.toList(),
+                    vertexCoordinates.size * Float.SIZE_BYTES,
+                    ByteBuffer::putFloat
+                )
+                val normalArray = it.getNormalArray()
+                val normalArrayBuffer = createByteBuffer(
+                    normalArray.toList(),
+                    normalArray.size * Float.SIZE_BYTES,
+                    ByteBuffer::putFloat
+                )
+                val mesh = TriangleIndexVertexArray(
+                    triangleVertexIndexes.size / 3,
+                    triangleIndexesBuffer,
+                    Int.SIZE_BYTES * 3,
+                    vertexCoordinates.size / 3,
+                    vertexCoordinatesBuffer,
+                    Float.SIZE_BYTES * 3
+                )
+                (mesh.getLockedVertexIndexBase(0) as ByteBufferVertexData).setNormalData(
+                    normalArray.size / 3,
+                    normalArrayBuffer,
+                    Float.SIZE_BYTES * 3
+                )
+                val collisionShape = BvhTriangleMeshShape(mesh, true)
+                val collisionObject = CollisionObject()
+                collisionObject.collisionShape = collisionShape
+                CollidableItemEntity.setBaseCollisionObject(item, collisionObject)
             }
         }
-        CollidableItemEntity.getIrShape(item).getFaces().forEach {
+        if (itemEntity is CollidableItemEntity) {
+            val collisionObject = itemEntity.getCollisionObject()
             DrawUtil.drawFaceBorder(matrixStack, vertexConsumerProvider.getBuffer(RenderLayer.getLines()),
-                it, 1.0f, 1.0f, 1.0f, 1.0f)
+                collisionObject, 1.0f, 1.0f, 1.0f, 1.0f)
         }
+    }
+
+    private fun <T> createByteBuffer(array: List<T>, bytes: Int, putOperation: ByteBuffer.(T) -> ByteBuffer): ByteBuffer {
+        val bytebuffer = ByteBuffer
+            .allocateDirect(bytes)
+            .order(ByteOrder.nativeOrder())
+        array.forEach { bytebuffer.putOperation(it) }
+        return bytebuffer
     }
 
     class VertexConsumerCapturer(
@@ -79,17 +127,35 @@ class CollidableItemEntityRenderer(
         }
     }
 
-    class VertexesCapturer(
-        private val bufferBuilder: VertexConsumer
-    ) : VertexConsumer by bufferBuilder {
+    class VertexesCapturer(private val bufferBuilder: VertexConsumer) : VertexConsumer by bufferBuilder {
 
-        private var vertexCache: Vector3f = Vector3f()
+        private val vertices = mutableSetOf<Vector3f>()
+        private val triangleVertexIndexArray = ArrayList<Int>()
+        private val normals = ArrayList<Vector3f>()
+        private val quadIndex = ArrayList<Int>()
+        private var vertexCache = Vector3f()
 
-        private val irShape: IrregularShape = IrregularShape()
-        private val pointStack: Stack<Vector3f> = Stack()
+        fun getNormalArray(): FloatArray {
+            return createFloatArray(normals.size * 3, normals.toTypedArray())
+        }
 
-        fun getIrShape(): IrregularShape {
-            return irShape
+        fun getVerticesCoordinateArray(): FloatArray {
+            return createFloatArray(vertices.size * 3, vertices.toTypedArray())
+        }
+
+        private fun createFloatArray(size: Int, array: Array<Vector3f>): FloatArray {
+            val floatArray = FloatArray(size)
+            var index = 0
+            array.forEach {
+                floatArray[index++] = it.x
+                floatArray[index++] = it.y
+                floatArray[index++] = it.z
+            }
+            return floatArray
+        }
+
+        fun getTriangleVertexIndexArray(): IntArray {
+            return triangleVertexIndexArray.toIntArray()
         }
 
         override fun vertex(x: Float, y: Float, z: Float): VertexConsumer {
@@ -98,18 +164,51 @@ class CollidableItemEntityRenderer(
         }
 
         override fun normal(x: Float, y: Float, z: Float): VertexConsumer {
-            val vector = Vector3f(x, y, z)
-            pointStack.push(vertexCache)
-            if (pointStack.size >= 4) {
-                val pointList = listOf(
-                    pointStack.pop(),
-                    pointStack.pop(),
-                    pointStack.pop(),
-                    pointStack.pop()
-                )
-                irShape.addFace(pointList, vector)
+            val normal = Vector3f(x, y, z)
+            vertices.add(vertexCache)
+            quadIndex.add(vertices.indexOf(vertexCache))
+            if (quadIndex.size == 4) {
+                triangleVertexIndexArray.addAll(listOf(quadIndex[0], quadIndex[1], quadIndex[2]))
+                triangleVertexIndexArray.addAll(listOf(quadIndex[0], quadIndex[2], quadIndex[3]))
+                normals.addAll(listOf(normal, normal))
+                quadIndex.clear()
             }
             return bufferBuilder.normal(x, y, z)
         }
     }
+}
+
+private var ByteBufferVertexData.normalData: ByteBuffer?
+    get() = CollidableItemEntity.normalDataMap[this]
+    set(value) {
+        CollidableItemEntity.normalDataMap[this] = value!!
+    }
+
+private var ByteBufferVertexData.normalCount: Int
+    get() = CollidableItemEntity.normalCountMap[this] ?: 0
+    set(value) {
+        CollidableItemEntity.normalCountMap[this] = value
+    }
+
+private var ByteBufferVertexData.normalStride: Int
+    get() = CollidableItemEntity.normalStrideMap[this] ?: 0
+    set(value) {
+        CollidableItemEntity.normalStrideMap[this] = value
+    }
+
+fun ByteBufferVertexData.setNormalData(normalCount: Int, normalData: ByteBuffer, normalStride: Int) {
+    this.normalCount = normalCount
+    this.normalData = normalData
+    this.normalStride = normalStride
+}
+
+fun ByteBufferVertexData.getNormalData(idx: Int): Vector3f {
+    val off = idx * normalStride
+    return this.normalData?.let {
+        Vector3f(
+        it.getFloat(off + Float.SIZE_BYTES * 0),
+        it.getFloat(off + Float.SIZE_BYTES * 1),
+        it.getFloat(off + Float.SIZE_BYTES * 2)
+        )
+    } ?: Vector3f()
 }

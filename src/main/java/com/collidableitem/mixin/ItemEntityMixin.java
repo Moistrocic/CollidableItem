@@ -1,14 +1,9 @@
 package com.collidableitem.mixin;
 
-import com.collidableitem.entity.CollidableItemEntity;
-import com.collidableitem.utils.IrregularShape;
-import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ItemEntity;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.*;
-import net.minecraft.util.shape.VoxelShape;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,25 +15,25 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class ItemEntityMixin {
     @Redirect(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/World;isSpaceEmpty(Lnet/minecraft/entity/Entity;Lnet/minecraft/util/math/Box;)Z"))
     private boolean isSpaceEmpty(World world, Entity entity, Box box) {
-        if (entity instanceof CollidableItemEntity collidableItemEntity) {
-            Vec3d pos = entity.getPos();
-            Item item = collidableItemEntity.getStack().getItem();
-            IrregularShape irShape = CollidableItemEntity.getIrShape(item);
-            BlockBox blockBox = irShape.getBlockBox(pos);
-            return BlockPos.stream(blockBox)
-                    .map(blockPos -> {
-                        BlockState state = world.getBlockState(blockPos);
-                        VoxelShape shape = state.getCollisionShape(world, blockPos);
-                        return shape.getBoundingBoxes();
-                    }).noneMatch(boxes -> {
-                        for (Box box1 : boxes) {
-                            if (irShape.isIntersect(box1)) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    });
-        }
+//        if (entity instanceof CollidableItemEntity collidableItemEntity) {
+//            Vec3d pos = entity.getPos();
+//            Item item = collidableItemEntity.getStack().getItem();
+//            IrregularShape irShape = CollidableItemEntity.getIrShape(item);
+//            irShape.setPos(entity.getPos());
+//            BlockBox blockBox = irShape.getBlockBox(pos);
+//            return BlockPos.stream(blockBox)
+//                    .noneMatch(blockPos -> {
+//                        BlockState state = world.getBlockState(blockPos);
+//                        VoxelShape shape = state.getCollisionShape(world, blockPos);
+//                        List<Box> boxes = shape.getBoundingBoxes();
+//                        for (Box box1 : boxes) {
+//                            if (irShape.isIntersect(IrregularShape.toCollisionObject(box1))) {
+//                                return true;
+//                            }
+//                        }
+//                        return false;
+//                    });
+//        }
         return world.isSpaceEmpty(entity, entity.getBoundingBox().contract(1.0E-7));
     }
 
